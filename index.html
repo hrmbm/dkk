@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="id"><head>
-<meta name="reholz-release" content="v13.9.2-branch-evidence-attendance-map">
+<meta name="reholz-release" content="v13.9.4-incentive-exclusions">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <link rel="preconnect" href="https://unpkg.com" crossorigin="">
@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://a.basemaps.cartocdn.com" crossorigin="">
 <link rel="preconnect" href="https://b.basemaps.cartocdn.com" crossorigin="">
 <meta name="theme-color" content="#007850">
-<meta name="app-release" content="v13.9.2-branch-evidence-attendance-map">
+<meta name="app-release" content="v13.9.3-clean-mobile-incentive-map">
 <title>ReHolz HRIS</title>
 <meta name="description" content="Sistem informasi karyawan ReHolz untuk presensi, foto profil, lokasi kantor, dan pengelolaan cuti.">
 <meta property="og:title" content="ReHolz HRIS">
@@ -2962,6 +2962,25 @@ body.rh-desk-on .rk-formula-footer{position:sticky;bottom:0;z-index:4;padding:12
   }
 }
 </style>
+
+<style id="rh-mobile-refresh-and-map-label-css">
+.menu-item:disabled { opacity:.62; cursor:wait; }
+.rk-incentive-settings-tabs { display:flex; gap:8px; padding:0 0 14px; margin-bottom:14px; border-bottom:1px solid #DCE7DE; }
+.rk-incentive-settings-tab { appearance:none; border:1px solid #DCE7DE; background:#FFFFFF; color:#486052; border-radius:9px; padding:9px 16px; font:inherit; font-weight:650; cursor:pointer; }
+.rk-incentive-settings-tab.on { background:#EAF4EC; color:#00553A; border-color:#87B99A; }
+.leaflet-tooltip.rk-employee-map-label { background:rgba(255,255,255,.96); border:1px solid #8AB79A; border-radius:6px; box-shadow:0 1px 5px rgba(0,48,30,.18); color:#004C33; font:600 11px/1.2 system-ui,sans-serif; padding:3px 6px; white-space:nowrap; }
+.leaflet-tooltip.rk-employee-map-label:before { border-top-color:#8AB79A; }
+</style>
+
+<style id="rh-incentive-exclusions-v1394-css">
+.rk-incentive-settings-tabs { flex-wrap:wrap; }
+.rk-incentive-exclusion-toolbar { display:grid; grid-template-columns:minmax(220px,1.4fr) minmax(180px,1fr) auto; gap:10px; align-items:end; }
+.rk-incentive-exclusion-list { overflow-x:auto; }
+.rk-incentive-exclusion-list .rk-table { min-width:600px; }
+.rk-incentive-exclusion-list .rk-table td:last-child { white-space:nowrap; }
+.rk-incentive-exclusion-status { color:#52685C; font-size:12px; }
+@media(max-width:700px){ .rk-incentive-exclusion-toolbar{grid-template-columns:1fr;} .rk-incentive-exclusion-toolbar .rk-btn{width:100%;} }
+</style>
 </head>
 <body>
 <div id="rhLimitedAccess" role="status" aria-live="polite">Akses terbatas</div>
@@ -3485,8 +3504,6 @@ window.__APP_PREPARING_ASSETS = true;
           </button>
         </div>
         <div class="shift-note ok" id="shiftNote">Memuat status presensi...</div>
-        <button type="button" id="btnRefreshAppData" class="btn btn-ghost" style="margin:14px auto 0;max-width:360px;padding:10px 14px;font-size:13px" onclick="refreshAppData()">↻ Perbarui Data Aplikasi &amp; Lokasi Kantor</button>
-        <div id="appDataRefreshHint" role="status" aria-live="polite" style="min-height:16px;margin-top:7px;font-size:11.5px;color:var(--txt-muted)"></div>
       </div>
     </div>
 
@@ -3631,6 +3648,19 @@ window.__APP_PREPARING_ASSETS = true;
   </svg>
         </div>
         <span>Menu Admin</span>
+      </button>
+
+      <button class="menu-item" id="btnRefreshAppData" type="button" onclick="refreshAppData()" aria-label="Refresh data aplikasi">
+        <div class="menu-ic re-3d">
+          <svg viewBox="0 0 36 36" width="34" height="34" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <defs>
+              <linearGradient id="wdRefresh" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#57B488"/><stop offset="50%" stop-color="#178A5D"/><stop offset="100%" stop-color="#004C33"/></linearGradient>
+            </defs>
+            <circle cx="18" cy="18" r="12.2" fill="#F2F9F4" stroke="url(#wdRefresh)" stroke-width="2.4"/>
+            <path d="M25.5 12.5A9 9 0 0 0 10 11l-2 2.5M10 11H7.5V8.5M10.5 23.5A9 9 0 0 0 26 25l2-2.5M26 25h2.5v2.5" stroke="#007850" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <span id="menuRefreshLabel">Refresh</span>
       </button>
     </div>
 
@@ -4299,8 +4329,8 @@ window.__APP_PREPARING_ASSETS = true;
 var SUPABASE_URL = 'https://gkpaaabmzusqzrstbivp.supabase.co';
 var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrcGFhYWJtenVzcXpyc3RiaXZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1MjEzNTQsImV4cCI6MjEwOTA5NzM1NH0.Asv7bcSPWWeTuCWHfncEtJVOiVZ7b_TpyZbvheyH2rE';
 var APP_VERSION = '6.6-SUPABASE-REHOLZ-HRIS-AREA-DELEGATE-ROLE-GRID'; // Kept in sync with existing app-version RPC to avoid forced reload loops.
-var RH_HTML_RELEASE = 'v13.9.2-branch-evidence-attendance-map';
-var RH_DISPLAY_VERSION = 'v13.9.2';
+var RH_HTML_RELEASE = 'v13.9.3-clean-mobile-incentive-map';
+var RH_DISPLAY_VERSION = 'v13.9.3';
 var RH_RELEASE_STORAGE_KEY = 'reh_html_release_seen';
 var RH_RELEASE_UPGRADE_ACTIVE = false;
 var MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model/';
@@ -4757,7 +4787,7 @@ function setPrepProgress(p, t) {
 
 function registerAppServiceWorker() {
   if (!('serviceWorker' in navigator)) return Promise.resolve(false);
-  return navigator.serviceWorker.register('./sw.js?v=25', { scope: './', updateViaCache: 'none' }).then(function(registration) {
+  return navigator.serviceWorker.register('./sw.js?v=27', { scope: './', updateViaCache: 'none' }).then(function(registration) {
     // Ask the browser to revalidate sw.js instead of trusting an old HTTP-cache copy.
     try { if (registration && typeof registration.update === 'function') registration.update().catch(function() {}); } catch (e) {}
     // The new worker self-activates; this message also helps older compatible workers.
@@ -6034,9 +6064,6 @@ function renderHome() {
   if (welcomeSub) welcomeSub.textContent = hariID(now) + ', ' + now.getDate() + ' ' + bulanID(now) + ' ' + now.getFullYear() + ' • Portal HRIS ReHolz - LUCEO';
   $('shiftHeadTitle').textContent = 'Jadwal Shift — ' + hariID(now) + ', ' + now.getDate() + ' ' + bulanID(now) + ' ' + now.getFullYear();
   renderShiftStatus();
-  var officeHint = $('appDataRefreshHint');
-  if (officeHint && S.office && S.office.branch) officeHint.textContent = 'Lokasi kantor aktif: ' + S.office.branch + '. Jika cabang karyawan baru saja diubah, tekan Perbarui Data Aplikasi.';
-  else if (officeHint && e.branch) officeHint.textContent = 'Lokasi kantor untuk cabang ' + e.branch + ' belum diverifikasi. Tekan Perbarui Data Aplikasi.';
   renderFaceBanner();
   hydrateFaces();
 }
@@ -6188,30 +6215,28 @@ async function refreshAttendanceContext(forceOfficeList) {
 }
 
 function refreshAppData() {
-  var btn = $('btnRefreshAppData'), hint = $('appDataRefreshHint');
-  if (btn && btn.disabled) return;
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Memperbarui data…'; }
-  if (hint) { hint.textContent = 'Mengambil profil, status presensi, dan lokasi kantor cabang dari server…'; hint.style.color = 'var(--txt-muted)'; }
+  var btn = $('btnRefreshAppData'), label = $('menuRefreshLabel');
+  if (btn && btn.disabled) return false;
+  if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
+  if (label) label.textContent = 'Memuat…';
   return refreshAttendanceContext(true).then(function(result) {
     if (!result.office) {
       var branch = String(result.profile && (result.profile.branch || result.profile.cabang) || 'belum ditentukan');
-      var msg = 'Lokasi kantor aktif untuk cabang ' + branch + ' belum tersedia atau tidak valid. Admin perlu memeriksa menu Lokasi Kantor. Lokasi cabang lama tidak digunakan.';
-      if (hint) { hint.textContent = msg; hint.style.color = '#9C382A'; }
+      var msg = 'Lokasi kantor aktif untuk cabang ' + branch + ' belum tersedia atau tidak valid. Periksa menu Lokasi Kantor.';
       toast(msg);
       return false;
     }
-    if (hint) { hint.textContent = 'Data terbaru berhasil dimuat. Cabang kantor aktif: ' + result.office.branch + '.'; hint.style.color = '#007850'; }
     if (typeof loadTeam === 'function') loadTeam();
     if (typeof loadMyRequests === 'function') loadMyRequests();
-    toast('Data aplikasi dan lokasi kantor berhasil diperbarui.');
+    toast('Data berhasil diperbarui.');
     return true;
   }).catch(function(e) {
-    var msg = 'Pembaruan data gagal: ' + (e && e.message || e) + '. Periksa koneksi lalu coba lagi.';
-    if (hint) { hint.textContent = msg; hint.style.color = '#9C382A'; }
+    var msg = 'Pembaruan data gagal: ' + (e && e.message || e) + '.';
     toast(msg);
     return false;
   }).finally(function() {
-    if (btn) { btn.disabled = false; btn.textContent = '↻ Perbarui Data Aplikasi & Lokasi Kantor'; }
+    if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
+    if (label) label.textContent = 'Refresh';
   });
 }
 window.refreshAppData = refreshAppData;
@@ -7410,7 +7435,7 @@ async function submitAttendance() {
     }
     var payload = {
       nik: S.user.nik, tipe: ATT.type, latitude: p.latitude, longitude: p.longitude, accuracy: p.accuracy,
-      address: '', faceDescriptor: desc, catatan: catatan, fotoBase64: fotoBase64, attendanceMode: ATT.dayOffChoice || null
+      address: '', faceDescriptor: desc, catatan: catatan, fotoBase64: fotoBase64, attendanceMode: ATT.type === 'MASUK' ? (ATT.dayOffChoice || null) : null
     };
     var res = await api('simpanAbsensi', [payload], 40000);
     if (!res || res.success !== true) {
@@ -10860,7 +10885,7 @@ function showHrPlaceholder(title, group, description) {
         <button type="button" class="rk-parent" onclick="RHDeskApi.rkToggleGroup(this)"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Waktu &amp; Kehadiran<span class="rk-chev">▾</span></button>
         <div class="rk-sub">
           <button data-p="att"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Rekap Absensi</button>
-          <button data-p="attmap" id="rkNavAttMap" style="display:none"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/><circle cx="15" cy="10" r="2"/></svg>Peta Presensi</button>
+          <button data-p="attmap" id="rkNavAttMap" style="display:none"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/><circle cx="15" cy="10" r="2"/></svg>Persebaran Karyawan</button>
           <button data-p="cuti"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>Rekap Time Off</button>
           <button data-p="rekap"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h4"/></svg>Laporan Absensi</button>
         </div>
@@ -10878,6 +10903,7 @@ function showHrPlaceholder(title, group, description) {
         <button type="button" class="rk-parent" onclick="RHDeskApi.rkToggleGroup(this)"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-7"/><path d="M17 6h2v2"/></svg>Insentif<span class="rk-chev">▾</span></button>
         <div class="rk-sub">
           <button data-p="incentive-employee"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 2.5-5 6-5s6 2 6 5M17 8h4M19 6v4M17 15h4M17 19h4"/></svg>Rekap Insentif</button>
+          <button data-p="incentive-settings"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.7 2.9-.1-.1a1.7 1.7 0 0 0-1.8.5l-.1.1h-3.4l-.1-.1a1.7 1.7 0 0 0-1.8-.5l-.1.1L9 17l.1-.1a1.7 1.7 0 0 0 .3-1.9l-.1-.1v-3.4l.1-.1a1.7 1.7 0 0 0-.3-1.9L9 9.4l1.7-2.9.1.1a1.7 1.7 0 0 0 1.8-.5l.1-.1h3.4l.1.1a1.7 1.7 0 0 0 1.8.5l.1-.1 1.7 2.9-.1.1a1.7 1.7 0 0 0-.3 1.9l.1.1v3.4z"/></svg>Setting Insentif</button>
         </div>
       </div>
       <div class="rk-group">
@@ -10889,8 +10915,6 @@ function showHrPlaceholder(title, group, description) {
           <button data-p="log"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l2.5 2.5"/><circle cx="12" cy="12" r="9"/></svg>Log Aktivitas</button>
           <button data-p="attset"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.7 2.94-.08-.02a1.7 1.7 0 0 0-1.78.47l-.06.06h-3.4l-.06-.08a1.7 1.7 0 0 0-1.78-.47l-.08.02-1.7-2.94.06-.06A1.7 1.7 0 0 0 9.6 15l-.02-.08V11.5l.08-.06a1.7 1.7 0 0 0 .47-1.78l-.02-.08 2.94-1.7.06.06a1.7 1.7 0 0 0 1.88.34l.08-.02h3.4l.06.08a1.7 1.7 0 0 0 1.78.47l.08-.02 1.7 2.94-.06.06A1.7 1.7 0 0 0 21.7 13l.02.08V15z"/></svg>Aturan Kehadiran</button>
           <button data-p="calendar"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01"/></svg>Kalender Kerja</button>
-          <button data-p="incentive-signatories"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/><path d="M14 8l3 3"/></svg>Penandatangan Insentif</button>
-          <button data-p="incentive-formula"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 8l3 3-3 3M13 15h3"/></svg>Formula Insentif</button>
         </div>
       </div>
     </nav>
@@ -10965,9 +10989,17 @@ function showHrPlaceholder(title, group, description) {
     <section class="rk-page" id="rkp-log"></section>
     <section class="rk-page" id="rkp-myprofile"></section>
     <section class="rk-page" id="rkp-changepin"></section>
-    <section class="rk-page" id="rkp-incentive-signatories"></section>
+    <section class="rk-page" id="rkp-incentive-settings">
+      <div class="rk-incentive-settings-tabs" role="tablist" aria-label="Setting Insentif">
+        <button type="button" class="rk-incentive-settings-tab on" data-incentive-settings-tab="signatories" role="tab" aria-selected="true">Setting</button>
+        <button type="button" class="rk-incentive-settings-tab" data-incentive-settings-tab="exclusions" role="tab" aria-selected="false">Pengecualian</button>
+        <button type="button" class="rk-incentive-settings-tab" data-incentive-settings-tab="formula" role="tab" aria-selected="false">Formula</button>
+      </div>
+      <div id="rkp-incentive-signatories" class="rk-incentive-settings-panel"></div>
+      <div id="rkp-incentive-exclusions" class="rk-incentive-settings-panel" style="display:none"></div>
+      <div id="rkp-incentive-formula" class="rk-incentive-settings-panel" style="display:none"></div>
+    </section>
     <section class="rk-page" id="rkp-incentive-employee"></section>
-    <section class="rk-page" id="rkp-incentive-formula"></section>
   </main>
 </div>
 
@@ -11016,7 +11048,7 @@ function showHrPlaceholder(title, group, description) {
     emp: ['Daftar Karyawan', 'Kelola data karyawan'],
     pfile: ['Personal File Karyawan', 'Informasi personal dan pekerjaan karyawan'],
     att: ['Rekap Absensi', 'Rekapitulasi Kehadiran Karyawan'],
-    attmap: ['Peta Presensi', 'Posisi Clock In terakhir karyawan yang belum Clock Out'],
+    attmap: ['Persebaran Karyawan', ''],
     rekap: ['Laporan Absensi', 'Rekapitulasi kehadiran per karyawan dan rentang tanggal'],
     attset: ['Aturan Kehadiran', 'Atur jadwal cabang dan toleransi keterlambatan'],
     calendar: ['Kalender Kerja', 'Kelola hari libur nasional, hari kerja, dan hari libur'],
@@ -11029,9 +11061,8 @@ function showHrPlaceholder(title, group, description) {
     log: ['Log Aktivitas', 'Riwayat aktivitas pengguna sistem'],
     myprofile: ['Info Saya', 'Informasi akun pribadi'],
     changepin: ['Ubah PIN', 'Perbarui PIN akun'],
-    'incentive-signatories': ['Penandatangan Insentif', 'Atur pengaju, penyetuju, dan penerima untuk dokumen insentif'],
+    'incentive-settings': ['Setting Insentif', ''],
     'incentive-employee': ['Rekap Insentif', 'Rincian insentif dan absensi per karyawan'],
-    'incentive-formula': ['Formula Insentif', 'Atur tarif, ambang batas, dan faktor perhitungan']
   };
   var cur = 'dash';
   var empUI = { q: '', org: '', st: '', sortKey: '', sortDir: 'asc', fullList: [], directoryError: '', selected: null, detailTab: 'personal', personalTab: 'basic', relationTab: 'approval', detailExtraByNik: Object.create(null), detailExtraLoadedByNik: Object.create(null), detailExtraLoadingByNik: Object.create(null), cacheAt: 0, loading: false };
@@ -11113,7 +11144,7 @@ function showHrPlaceholder(title, group, description) {
   /* ---------------- Navigasi halaman ---------------- */
   function goPage(p) {
     if (p === 'attmap' && !(window.S && S.user && String(S.user.role || '').toUpperCase() === 'SUPERADMIN')) {
-      rkToast('Peta Presensi hanya tersedia untuk Superadmin.'); p = 'att';
+      rkToast('Persebaran Karyawan hanya tersedia untuk Superadmin.'); p = 'att';
     }
     if (!TITLES[p]) p = 'dash';
     cur = p;
@@ -11127,11 +11158,12 @@ function showHrPlaceholder(title, group, description) {
       emp: ['Daftar Karyawan', ''],
       pfile: ['Personal File Karyawan', ''],
       att: ['Rekap Absensi', 'Rekap kehadiran Karyawan'],
+      attmap: ['Persebaran Karyawan', ''],
       cuti: ['Rekap Time Off', 'Rekap Ketidakhadiran Karyawan'],
       rekap: ['Laporan Absensi', ''],
-      'incentive-signatories': ['Penandatangan Insentif', 'Pengaturan penandatangan dokumen insentif'],
+      'incentive-settings': ['Setting Insentif', ''],
       'incentive-employee': ['Rekap Insentif', 'Rincian nominal, perhitungan harian, dan persetujuan'],
-      'incentive-formula': ['Formula Insentif', 'Hanya Superadmin dapat menyimpan perubahan formula']
+      
     };
     var heading = headerTitles[p] || null;
     if (pageHeading) pageHeading.style.display = heading ? 'flex' : 'none';
@@ -11154,10 +11186,8 @@ function showHrPlaceholder(title, group, description) {
     if (p === 'log') renderLogPage();
     if (p === 'myprofile') renderMyProfilePage();
     if (p === 'changepin') renderChangePinPage();
-    if (p === 'incentive-signatories') renderIncentiveSignatoriesPage();
-    
+    if (p === 'incentive-settings') renderIncentiveSettingsPage();
     if (p === 'incentive-employee') renderIncentiveEmployeePage();
-    if (p === 'incentive-formula') renderIncentiveFormulaPage();
     /* Buka otomatis grup sidebar yang memuat halaman aktif (pola HRMSMBM) */
     var actBtn = document.querySelector('#rkNav button[data-p="' + p + '"]');
     if (actBtn) { var grp = actBtn.closest('.rk-group'); if (grp) grp.classList.remove('closed'); }
@@ -12800,11 +12830,11 @@ function showHrPlaceholder(title, group, description) {
   }
   var attLiveMapState = { map: null, layer: null, date: '', rows: [], loaded: false };
   function renderAttMapPage() {
-    if (!(window.S && S.user && String(S.user.role || '').toUpperCase() === 'SUPERADMIN')) { rkToast('Peta Presensi hanya tersedia untuk Superadmin.'); return; }
+    if (!(window.S && S.user && String(S.user.role || '').toUpperCase() === 'SUPERADMIN')) { rkToast('Persebaran Karyawan hanya tersedia untuk Superadmin.'); return; }
     var el=document.getElementById('rkp-attmap');if(!el)return;
     if(attLiveMapState.map){try{attLiveMapState.map.off();attLiveMapState.map.remove();}catch(_){}attLiveMapState.map=null;attLiveMapState.layer=null;}
     var today=attMonLocalISO(new Date());attLiveMapState.date=today;attLiveMapState.rows=[];attLiveMapState.loaded=false;
-    el.innerHTML='<div class="rk-card rk-att-monitor-toolbar"><div class="rk-att-monitor-dates"><label>Tanggal presensi<input class="rk-in" id="rkAttLiveDate" type="date" value="'+today+'"></label><button type="button" class="rk-btn" id="rkAttLiveRefresh">↻ Perbarui Peta</button></div><div class="rk-att-monitor-search"><span id="rkAttLiveCount" class="rk-pill info">0 karyawan sedang absen</span></div><p class="rk-note" style="margin-top:10px">Peta menampilkan koordinat saat Clock In terakhir untuk karyawan yang belum memiliki Clock Out pada tanggal pilihan. Ini bukan pelacakan GPS bergerak secara real time.</p></div><div class="rk-card"><div id="rkAttLiveMap" style="width:100%;height:min(68vh,680px);min-height:360px;border-radius:12px;background:#EEF4EF;overflow:hidden"><div class="rk-loading" style="padding:24px">Memuat peta presensi…</div></div><div id="rkAttLiveMapNote" class="rk-note" style="margin-top:10px"></div><div id="rkAttLiveUnlocated" style="margin-top:8px"></div></div>';
+    el.innerHTML='<div class="rk-card rk-att-monitor-toolbar"><div class="rk-att-monitor-dates"><label>Tanggal presensi<input class="rk-in" id="rkAttLiveDate" type="date" value="'+today+'"></label><button type="button" class="rk-btn" id="rkAttLiveRefresh">↻ Perbarui Peta</button></div><div class="rk-att-monitor-search"><span id="rkAttLiveCount" class="rk-pill info">0 karyawan sedang absen</span></div></div><div class="rk-card"><div id="rkAttLiveMap" style="width:100%;height:min(68vh,680px);min-height:360px;border-radius:12px;background:#EEF4EF;overflow:hidden"><div class="rk-loading" style="padding:24px">Memuat peta presensi…</div></div><div id="rkAttLiveMapNote" class="rk-note" style="margin-top:10px"></div><div id="rkAttLiveUnlocated" style="margin-top:8px"></div></div>';
     document.getElementById('rkAttLiveRefresh').addEventListener('click',fetchAttLiveMap);
     document.getElementById('rkAttLiveDate').addEventListener('change',fetchAttLiveMap);
     fetchAttLiveMap();
@@ -12885,12 +12915,14 @@ function showHrPlaceholder(title, group, description) {
           var address=String(attMonFirst(row,['location_address','address','alamat'])||'');
           var acc=attMonFirst(row,['accuracy','gps_accuracy']);
           var html='<b>'+escH(name)+'</b><br>ID: '+escH(nik)+'<br>Clock In: '+escH(time||'—')+(branch?'<br>Cabang: '+escH(branch):'')+(acc!==''?'<br>Akurasi GPS: '+escH(acc)+' m':'')+(address?'<br>'+escH(address):'');
-          L.marker([lat,lon]).addTo(attLiveMapState.layer).bindPopup(html);
+          L.marker([lat,lon]).addTo(attLiveMapState.layer)
+            .bindTooltip(escH(name), { permanent:true, direction:'top', offset:[0,-10], opacity:0.96, className:'rk-employee-map-label' })
+            .bindPopup(html);
         });
         if(active.length){var bounds=attLiveMapState.layer.getBounds();if(bounds.isValid())attLiveMapState.map.fitBounds(bounds.pad(active.length===1?0.18:0.12),{maxZoom:16});}
         else attLiveMapState.map.setView([-2.5,118],5);
         setTimeout(function(){if(attLiveMapState.map)attLiveMapState.map.invalidateSize();},120);
-        if(note)note.textContent=active.length?'Menampilkan posisi Clock In terakhir '+active.length+' karyawan yang belum Clock Out. Klik penanda untuk detail.':(unlocated.length?'Ada karyawan yang belum Clock Out, tetapi tidak memiliki koordinat valid sehingga tidak dapat dipetakan.':'Tidak ada karyawan dengan Clock In tanpa Clock Out pada tanggal ini.');
+        if(note)note.textContent=active.length?active.length+' karyawan ditampilkan di peta.':(unlocated.length?'Ada '+unlocated.length+' karyawan tanpa koordinat valid.':'Tidak ada karyawan yang sedang absen pada tanggal ini.');
       });
     }).catch(function(e){mapEl.innerHTML='<div class="rk-empty" style="padding:24px">Peta presensi gagal dimuat: '+escH(e&&e.message||e)+'</div>';if(note)note.textContent='Periksa akses Superadmin dan RPC hr_get_attendance_monitoring.';if(count)count.textContent='Data tidak tersedia';})
     .finally(function(){if(btn){btn.disabled=false;btn.textContent='↻ Perbarui Peta';}});
@@ -13061,9 +13093,10 @@ function showHrPlaceholder(title, group, description) {
         if(col===14){
           var coord=attMonCoordinates(x);
           var addr=String(v==null?'':v);
-          var isMapLabel=/^(show on map|—|-)$/i.test(addr);
+          var isMapLabel=/^(show on map|lihat di peta|—|-)$/i.test(addr.trim());
           var mapLink=coord?' <button type="button" class="rk-att-row-map-button" data-att-map-index="'+i+'">Lihat di Peta</button>':'';
-          return '<td class="rk-att-address">'+(coord&&isMapLabel?mapLink.replace(/^ /,''):escH(addr)+mapLink)+'</td>';
+          var addressHtml=isMapLabel?(coord?mapLink.replace(/^ /,''):'—'):(escH(addr)+mapLink);
+          return '<td class="rk-att-address">'+addressHtml+'</td>';
         }
         if(col===18){ return '<td>'+attMonApproval(x)+'</td>'; }
         var cls=(col===15?'rk-att-coordinate':(col===16?'rk-att-description':''));
@@ -15026,7 +15059,7 @@ function showHrPlaceholder(title, group, description) {
     body.innerHTML = h;
   }
   /* ---------------- INSENTIF: FRONTEND DRAFT + BACKEND RPC CONTRACT ---------------- */
-  var incentiveUI = { period: '', nik: 'ALL', recap: null, total: null, employeeNik:'ALL', employeeRecap:null, signatoryConfig:null, signatures: {prepared:'',approved:'',received:''}, signatoryScope:'ALL', signatoryIds:{prepared:'',approved:''}, formula: null, formulaLoaded:false, formulaDirty:false };
+  var incentiveUI = { period: '', nik: 'ALL', recap: null, total: null, employeeNik:'ALL', employeeRecap:null, signatoryConfig:null, signatures: {prepared:'',approved:'',received:''}, signatoryScope:'ALL', signatoryIds:{prepared:'',approved:''}, formula: null, formulaLoaded:false, formulaDirty:false, exclusions:[], exclusionsLoaded:false, exclusionsLoading:false };
   // Classic desktop script cannot access helpers declared inside the type=module core script.
   // Keep print dates deterministic in the company's Asia/Jakarta timezone.
   function rhTodayLocalIso() {
@@ -15100,13 +15133,13 @@ function showHrPlaceholder(title, group, description) {
     var el=document.getElementById('rkp-incentive-signatories');if(!el)return;
     var build=function(){
       var rows=empCurrentList().map(empNormalize).filter(function(x){return x.nik;});
-      el.innerHTML='<div class="rk-sig-intro"><div class="rk-sig-kicker">PENGATURAN DOKUMEN INSENTIF</div><h2>Penandatangan Insentif</h2></div>'+
+      el.innerHTML='<div class="rk-sig-intro"><div class="rk-sig-kicker">PENGATURAN DOKUMEN INSENTIF</div><h2>Setting Dokumen Insentif</h2></div>'+
         '<div class="rk-card rk-sig-card"><div class="rk-sig-section-head"><div><h3>Cakupan pengaturan</h3></div><span class="rk-sig-lock">'+(isSuperAdminRole()?'Superadmin':'Hanya lihat')+'</span></div><div class="rk-incentive-grid"><label>Pilih karyawan<select class="rk-in" id="rkSigScope"><option value="ALL">Semua karyawan</option>'+signatoryEmployeeOptions(incentiveUI.signatoryScope==='ALL'?'':incentiveUI.signatoryScope,true)+'</select></label></div></div>'+
-        '<div class="rk-sig-grid"><section class="rk-card rk-sig-person-card"><div class="rk-sig-number">01</div><h3>Pengaju</h3><label>Nama pengaju<select class="rk-in" id="rkSigPreparedBy" '+(isSuperAdminRole()?'':'disabled')+'>'+signatoryEmployeeOptions(incentiveUI.signatoryIds.prepared,true)+'</select></label></section>'+
+        '<div class="rk-sig-grid"><section class="rk-card rk-sig-person-card"><div class="rk-sig-number">01</div><h3>Diajukan Oleh</h3><label>Diajukan Oleh<select class="rk-in" id="rkSigPreparedBy" '+(isSuperAdminRole()?'':'disabled')+'>'+signatoryEmployeeOptions(incentiveUI.signatoryIds.prepared,true)+'</select></label></section>'+
         '<section class="rk-card rk-sig-person-card"><div class="rk-sig-number">02</div><h3>Disetujui oleh</h3><label>Nama penyetuju<select class="rk-in" id="rkSigApprovedBy" '+(isSuperAdminRole()?'':'disabled')+'>'+signatoryEmployeeOptions(incentiveUI.signatoryIds.approved,true)+'</select></label></section>'+
         '<section class="rk-card rk-sig-person-card"><div class="rk-sig-number">03</div><h3>Diterima oleh</h3><label>Nama penerima<input class="rk-in" id="rkSigReceivedBy" readonly value="Otomatis mengikuti karyawan yang sedang diproses"></label></section></div>'+
         ''+
-        '<div class="rk-toolbar rk-sig-actions"><div id="rkSigNotice" class="rk-incentive-note" aria-live="polite">Memuat penandatangan...</div><span style="flex:1"></span><button class="rk-btn ghost" id="rkSigReload" type="button">Muat Penandatangan</button><button class="rk-btn" id="rkSigSave" type="button" '+(isSuperAdminRole()?'':'disabled')+'>Simpan Penandatangan (Superadmin)</button></div>';
+        '<div class="rk-toolbar rk-sig-actions"><div id="rkSigNotice" class="rk-incentive-note" aria-live="polite">Memuat setting dokumen...</div><span style="flex:1"></span><button class="rk-btn ghost" id="rkSigReload" type="button">Muat Ulang</button><button class="rk-btn" id="rkSigSave" type="button" '+(isSuperAdminRole()?'':'disabled')+'>Simpan Setting (Superadmin)</button></div>';
       var scope=document.getElementById('rkSigScope');
       if(scope){scope.value=incentiveUI.signatoryScope||'ALL';scope.addEventListener('change',function(){incentiveUI.signatoryScope=this.value||'ALL';updateSignatoryRecipient();loadIncentiveSignatories();});}
       var prep=document.getElementById('rkSigPreparedBy');if(prep)prep.addEventListener('change',function(){incentiveUI.signatoryIds.prepared=this.value;});
@@ -15114,7 +15147,7 @@ function showHrPlaceholder(title, group, description) {
       var reload=document.getElementById('rkSigReload');if(reload)reload.addEventListener('click',function(){loadIncentiveSignatories(true);});
       var save=document.getElementById('rkSigSave');if(save)save.addEventListener('click',saveIncentiveSignatories);
       updateSignatoryRecipient();
-      if(!rows.length){var note=document.getElementById('rkSigNotice');if(note)note.textContent='Daftar karyawan belum tersedia. Nama penandatangan belum dapat dipilih.';}
+      if(!rows.length){var note=document.getElementById('rkSigNotice');if(note)note.textContent='Daftar karyawan belum tersedia. Nama karyawan belum dapat dipilih.';}
       else loadIncentiveSignatories();
     };
     if(empUI.fullList&&empUI.fullList.length)build();
@@ -15123,7 +15156,7 @@ function showHrPlaceholder(title, group, description) {
   function loadIncentiveSignatories(force){
     var note=document.getElementById('rkSigNotice');
     return rpcOptional('hr_get_incentive_signatories',{}).then(function(r){
-      if(!r){incentiveUI.signatoryConfig=null;if(note)note.textContent='Konfigurasi penandatangan belum tersedia dari backend. Nama contoh bukan konfigurasi tersimpan.';return null;}
+      if(!r){incentiveUI.signatoryConfig=null;if(note)note.textContent='Konfigurasi setting dokumen belum tersedia dari backend. Nama contoh bukan konfigurasi tersimpan.';return null;}
       var root=r.signatories||r.data||r;
       incentiveUI.signatoryConfig=root;
       var map=root.by_employee_id||root.byEmployeeId||root.employee_overrides||{};
@@ -15142,27 +15175,27 @@ function showHrPlaceholder(title, group, description) {
       incentiveUI.signatures.received=scope==='ALL'?'Sesuai nama karyawan pada rincian':((signatoryEmployeeById(scope)||{}).nama||'');
       updateSignatoryRecipient();
       var configured=!!(preparedId&&approvedId&&preparedText&&approvedText);
-      if(note)note.textContent=configured?'Penandatangan dimuat dari konfigurasi backend.':'Konfigurasi untuk cakupan ini belum tersimpan lengkap. Nama saran tidak digunakan saat cetak PDF.';
+      if(note)note.textContent=configured?'Setting dokumen dimuat dari konfigurasi backend.':'Konfigurasi untuk cakupan ini belum tersimpan lengkap. Nama saran tidak digunakan saat cetak PDF.';
       return root;
-    }).catch(function(e){incentiveUI.signatoryConfig=null;if(note)note.textContent='Gagal memuat penandatangan: '+(e&&e.message||e);return null;});
+    }).catch(function(e){incentiveUI.signatoryConfig=null;if(note)note.textContent='Gagal memuat setting dokumen: '+(e&&e.message||e);return null;});
   }
   function saveIncentiveSignatories(){
-    if(!isSuperAdminRole()){rkToast('Hanya Superadmin yang dapat menyimpan penandatangan.');return;}
+    if(!isSuperAdminRole()){rkToast('Hanya Superadmin yang dapat menyimpan setting dokumen.');return;}
     var scope=(document.getElementById('rkSigScope')||{}).value||'ALL';
     var preparedId=(document.getElementById('rkSigPreparedBy')||{}).value||'';
     var approvedId=(document.getElementById('rkSigApprovedBy')||{}).value||'';
     var prepared=signatoryEmployeeById(preparedId),approved=signatoryEmployeeById(approvedId);
-    if(!preparedId||!approvedId){rkToast('Pilih nama Pengaju dan Disetujui oleh terlebih dahulu.');return;}
+    if(!preparedId||!approvedId){rkToast('Pilih Diajukan Oleh dan Disetujui oleh terlebih dahulu.');return;}
     var cfg={scope:scope==='ALL'?'ALL':'EMPLOYEE',scope_employee_id:scope==='ALL'?null:scope,prepared_by_employee_id:preparedId,prepared_by:prepared?prepared.nama:'',approved_by_employee_id:approvedId,approved_by:approved?approved.nama:'',received_by_mode:'CURRENT_EMPLOYEE',received_by:scope==='ALL'?'PER_EMPLOYEE':((signatoryEmployeeById(scope)||{}).nama||'')};
     var scopeLabel=scope==='ALL'?'semua karyawan':((signatoryEmployeeById(scope)||{}).nama||scope);
-    if(!confirm('Simpan konfigurasi penandatangan untuk '+scopeLabel+'? Pengaju dan penyetuju akan digunakan pada dokumen insentif sesuai cakupan ini.'))return;
-    var note=document.getElementById('rkSigNotice');if(note)note.textContent='Menyimpan penandatangan ke backend...';
+    if(!confirm('Simpan setting dokumen insentif untuk '+scopeLabel+'? Nama Diajukan Oleh dan penyetuju akan digunakan pada dokumen insentif sesuai cakupan ini.'))return;
+    var note=document.getElementById('rkSigNotice');if(note)note.textContent='Menyimpan setting ke backend...';
     var button=document.getElementById('rkSigSave');if(button){button.disabled=true;button.textContent='Menyimpan...';}
     rpcOptional('hr_save_incentive_signatories',{p_signatories:cfg}).then(function(r){
-      if(r&&r.ok!==false){incentiveUI.signatoryScope=scope;incentiveUI.signatoryIds={prepared:preparedId,approved:approvedId};incentiveUI.signatures={prepared:cfg.prepared_by,approved:cfg.approved_by,received:cfg.received_by};if(note)note.textContent='Penandatangan berhasil dikirim untuk disimpan di backend.';rkToast(r.message||'Penandatangan disimpan.');}
-      else{if(note)note.textContent='Backend belum mengonfirmasi penyimpanan. Pastikan RPC hr_save_incentive_signatories mendukung konfigurasi berdasarkan cakupan karyawan.';rkToast('Penandatangan belum tersimpan permanen. Periksa RPC backend.');}
-    }).catch(function(e){if(note)note.textContent='Gagal menyimpan penandatangan: '+(e&&e.message||e);rkToast('Penandatangan gagal disimpan.');})
-      .finally(function(){if(button){button.disabled=!isSuperAdminRole();button.textContent='Simpan Penandatangan (Superadmin)';}});
+      if(r&&r.ok!==false){incentiveUI.signatoryScope=scope;incentiveUI.signatoryIds={prepared:preparedId,approved:approvedId};incentiveUI.signatures={prepared:cfg.prepared_by,approved:cfg.approved_by,received:cfg.received_by};if(note)note.textContent='Setting dokumen berhasil dikirim untuk disimpan di backend.';rkToast(r.message||'Setting dokumen disimpan.');}
+      else{if(note)note.textContent='Backend belum mengonfirmasi penyimpanan. Pastikan RPC hr_save_incentive_signatories mendukung konfigurasi berdasarkan cakupan karyawan.';rkToast('Setting dokumen belum tersimpan permanen. Periksa RPC backend.');}
+    }).catch(function(e){if(note)note.textContent='Gagal menyimpan setting dokumen: '+(e&&e.message||e);rkToast('Setting dokumen gagal disimpan.');})
+      .finally(function(){if(button){button.disabled=!isSuperAdminRole();button.textContent='Simpan Setting (Superadmin)';}});
   }
   function incentiveRecapTable(rows){
     if(!rows.length)return '<div class="rk-empty">Backend belum mengembalikan baris rekap untuk periode ini.</div>';
@@ -15425,13 +15458,170 @@ function showHrPlaceholder(title, group, description) {
       '<tr class="total"><td colspan="3" class="total-label">Total</td><td class="num">'+fmt(total)+'</td><td></td></tr>'+
       '</tbody></table>'+
       '<div class="rk-incentive-exact-terbilang"><i>Terbilang :</i><span>'+escH(titleCasePrintName(terbilang(total)))+'</span></div>'+
-      '<div class="rk-incentive-exact-signatures"><div><span>Disiapkan Oleh,</span>'+incentiveSignatureNameTag(sign.prepared_by||'','prepared')+'</div><div><span>Disetujui Oleh,</span>'+incentiveSignatureNameTag(sign.approved_by||'','approved')+'</div><div><span>Diterima Oleh,</span>'+incentiveSignatureNameTag(name,'received')+'</div></div>'+
+      '<div class="rk-incentive-exact-signatures"><div><span>Diajukan Oleh,</span>'+incentiveSignatureNameTag(sign.prepared_by||'','prepared')+'</div><div><span>Disetujui Oleh,</span>'+incentiveSignatureNameTag(sign.approved_by||'','approved')+'</div><div><span>Diterima Oleh,</span>'+incentiveSignatureNameTag(name,'received')+'</div></div>'+
       '</div>';
     return '<article class="rk-incentive-print-page rk-incentive-exact-page">'+content+'</article>';
   }
   function titleCasePrintName(value){
     return String(value||'').toLocaleLowerCase('id-ID').replace(/(^|[\s'-])([a-zà-ÿ])/g,function(_,sep,ch){return sep+ch.toLocaleUpperCase('id-ID');});
   }
+  function incentiveExclusionEmployeeOptions(selected) {
+    var excluded = Object.create(null);
+    (incentiveUI.exclusions || []).forEach(function (x) { excluded[String(x.employee_id || x.nik || '')] = true; });
+    var rows = empCurrentList().map(empNormalize).filter(function (x) { return x.nik && !excluded[String(x.nik)]; })
+      .sort(function (a, b) { return String(a.nama || '').localeCompare(String(b.nama || ''), 'id', { sensitivity: 'base' }); });
+    var html = '<option value="">Pilih karyawan...</option>';
+    rows.forEach(function (x) {
+      html += '<option value="' + escH(x.nik) + '"' + (String(selected || '') === String(x.nik) ? ' selected' : '') + '>' + escH(x.nama) + ' (' + escH(x.nik) + ')</option>';
+    });
+    return html;
+  }
+  function paintIncentiveExclusions() {
+    var box = document.getElementById('rkIncExclusionList');
+    var select = document.getElementById('rkIncExclusionEmployee');
+    var count = document.getElementById('rkIncExclusionCount');
+    if (!box) return;
+    var rows = (incentiveUI.exclusions || []).slice().sort(function (a, b) {
+      return String(a.nama || a.employee_id || '').localeCompare(String(b.nama || b.employee_id || ''), 'id', { sensitivity: 'base' });
+    });
+    if (count) count.textContent = rows.length + ' karyawan dikecualikan';
+    if (select) {
+      var selected = select.value || '';
+      select.innerHTML = incentiveExclusionEmployeeOptions(selected);
+      if (selected && Array.prototype.some.call(select.options, function (o) { return o.value === selected; })) select.value = selected;
+    }
+    if (!incentiveUI.exclusionsLoaded) {
+      box.innerHTML = '<div class="rk-empty">Memuat daftar pengecualian...</div>';
+      return;
+    }
+    if (!rows.length) {
+      box.innerHTML = '<div class="rk-empty">Belum ada karyawan yang dikecualikan.</div>';
+      return;
+    }
+    box.innerHTML = '<table class="rk-table"><thead><tr><th>Nama Karyawan</th><th>ID Karyawan</th><th>Cabang</th><th>Alasan</th><th></th></tr></thead><tbody>' + rows.map(function (x) {
+      var id = String(x.employee_id || x.nik || '');
+      return '<tr><td><b>' + escH(x.nama || x.full_name || id) + '</b></td><td>' + escH(id) + '</td><td>' + escH(x.branch || '—') + '</td><td>' + escH(x.reason || x.alasan || '—') + '</td><td>' +
+        (isSuperAdminRole() ? '<button type="button" class="rk-mini primary" data-incentive-restore="' + escH(id) + '">Pulihkan</button>' : '<span class="rk-muted">Dikecualikan</span>') + '</td></tr>';
+    }).join('') + '</tbody></table>';
+  }
+  function loadIncentiveExclusions(force) {
+    var note = document.getElementById('rkIncExclusionNotice');
+    if (incentiveUI.exclusionsLoading && !force) return Promise.resolve(null);
+    incentiveUI.exclusionsLoading = true;
+    if (note) note.textContent = 'Memuat daftar pengecualian...';
+    return rpcOptional('hr_get_incentive_exclusions', {}).then(function (r) {
+      if (!r || r.ok === false) {
+        incentiveUI.exclusionsLoaded = false;
+        if (note) { note.textContent = 'Backend belum menyediakan pengaturan pengecualian. Pasang patch SQL untuk mengaktifkannya.'; note.style.display = ''; }
+        paintIncentiveExclusions();
+        var unavailableBox = document.getElementById('rkIncExclusionList');
+        if (unavailableBox) unavailableBox.innerHTML = '<div class="rk-empty">Daftar pengecualian belum tersedia.</div>';
+        return null;
+      }
+      var root = r.exclusions || r.records || r.data || [];
+      if (!Array.isArray(root)) root = [];
+      incentiveUI.exclusions = root;
+      incentiveUI.exclusionsLoaded = true;
+      if (note) { note.textContent = ''; note.style.display = 'none'; }
+      paintIncentiveExclusions();
+      return root;
+    }).catch(function (e) {
+      incentiveUI.exclusionsLoaded = false;
+      if (note) { note.textContent = 'Gagal memuat pengecualian: ' + (e && e.message || e); note.style.display = ''; }
+      paintIncentiveExclusions();
+      var failedBox = document.getElementById('rkIncExclusionList');
+      if (failedBox) failedBox.innerHTML = '<div class="rk-empty">Daftar pengecualian gagal dimuat.</div>';
+      return null;
+    }).finally(function () { incentiveUI.exclusionsLoading = false; });
+  }
+  function setIncentiveEmployeeExclusion(employeeId, excluded, reason) {
+    if (!isSuperAdminRole()) { rkToast('Hanya Superadmin yang dapat mengubah pengecualian insentif.'); return Promise.resolve(null); }
+    employeeId = String(employeeId || '').trim();
+    if (!employeeId) { rkToast('Pilih karyawan terlebih dahulu.'); return Promise.resolve(null); }
+    var target = signatoryEmployeeById(employeeId);
+    var targetName = target ? target.nama : employeeId;
+    if (excluded && !confirm('Kecualikan ' + targetName + ' dari seluruh perhitungan dan rekap insentif?')) return Promise.resolve(null);
+    if (!excluded && !confirm('Pulihkan ' + targetName + ' ke perhitungan dan rekap insentif?')) return Promise.resolve(null);
+    var button = document.getElementById(excluded ? 'rkIncExclusionAdd' : 'rkIncExclusionList');
+    if (button && button.tagName === 'BUTTON') button.disabled = true;
+    var note = document.getElementById('rkIncExclusionNotice');
+    if (note) note.textContent = excluded ? 'Menyimpan pengecualian...' : 'Memulihkan karyawan...';
+    return rpcOptional('hr_set_incentive_employee_exclusion', {
+      p_employee_id: employeeId,
+      p_is_excluded: !!excluded,
+      p_reason: null
+    }).then(function (r) {
+      if (!r || r.ok === false) {
+        if (note) note.textContent = 'Perubahan belum dikonfirmasi backend. Pastikan patch SQL sudah dipasang dan hak akses Superadmin aktif.';
+        rkToast('Pengecualian belum tersimpan.');
+        return null;
+      }
+      incentiveUI.employeeRecap = null;
+      incentiveUI.employeeRecapParams = null;
+      incentiveUI.recap = null;
+      incentiveUI.total = null;
+      if (note) note.textContent = r.message || (excluded ? 'Karyawan dikecualikan dari rekap insentif.' : 'Karyawan dikembalikan ke rekap insentif.');
+      rkToast(r.message || 'Pengecualian diperbarui.');
+      return loadIncentiveExclusions(true);
+    }).catch(function (e) {
+      if (note) note.textContent = 'Gagal menyimpan perubahan: ' + (e && e.message || e);
+      rkToast('Perubahan pengecualian gagal disimpan.');
+      return null;
+    }).finally(function () { if (button && button.tagName === 'BUTTON') button.disabled = false; });
+  }
+  function renderIncentiveExclusionsPage() {
+    var el = document.getElementById('rkp-incentive-exclusions');
+    if (!el || el.dataset.built === '1') return;
+    el.dataset.built = '1';
+    el.innerHTML = '<div class="rk-sig-intro"><div class="rk-sig-kicker">KELAYAKAN PENERIMA</div><h2>Pengecualian Insentif</h2></div>' +
+      '<section class="rk-card rk-sig-card"><div class="rk-sig-section-head"><div><h3>Tambah pengecualian</h3></div><span class="rk-sig-lock">' + (isSuperAdminRole() ? 'Superadmin' : 'Hanya lihat') + '</span></div>' +
+      '<div class="rk-incentive-exclusion-toolbar"><label>Nama karyawan<select class="rk-in" id="rkIncExclusionEmployee" ' + (isSuperAdminRole() ? '' : 'disabled') + '><option value="">Memuat karyawan...</option></select></label>' +
+      '<button type="button" class="rk-btn" id="rkIncExclusionAdd" ' + (isSuperAdminRole() ? '' : 'disabled') + '>Kecualikan</button></div></section>' +
+      '<section class="rk-card rk-sig-card"><div class="rk-sig-section-head"><div><h3>Daftar pengecualian aktif</h3></div><span class="rk-pill info" id="rkIncExclusionCount">—</span></div>' +
+      '<div id="rkIncExclusionList" class="rk-incentive-exclusion-list"><div class="rk-loading">Memuat...</div></div></section>' +
+      '<div class="rk-incentive-note" id="rkIncExclusionNotice" aria-live="polite" style="display:none"></div>';
+    var add = document.getElementById('rkIncExclusionAdd');
+    if (add) add.addEventListener('click', function () {
+      var select = document.getElementById('rkIncExclusionEmployee');
+      setIncentiveEmployeeExclusion(select && select.value, true, null);
+    });
+    var list = document.getElementById('rkIncExclusionList');
+    if (list) list.addEventListener('click', function (ev) {
+      var button = ev.target.closest && ev.target.closest('[data-incentive-restore]');
+      if (!button) return;
+      setIncentiveEmployeeExclusion(button.getAttribute('data-incentive-restore'), false, null);
+    });
+    loadIncentiveExclusions();
+    syncEmpDirectory(false).then(paintIncentiveExclusions).catch(paintIncentiveExclusions);
+  }
+  function setIncentiveSettingsTab(tab) {
+    tab = ['formula','exclusions'].indexOf(tab)>=0 ? tab : 'signatories';
+    var names = ['signatories','exclusions','formula'];
+    names.forEach(function(name){
+      var panel=document.getElementById('rkp-incentive-'+name);
+      var button=document.querySelector('#rkp-incentive-settings [data-incentive-settings-tab="'+name+'"]');
+      if(panel)panel.style.display=name===tab?'':'none';
+      if(button){button.classList.toggle('on',name===tab);button.setAttribute('aria-selected',name===tab?'true':'false');}
+    });
+  }
+  function renderIncentiveSettingsPage(){
+    var root=document.getElementById('rkp-incentive-settings');if(!root)return;
+    if(!root.dataset.tabsBound){
+      root.dataset.tabsBound='1';
+      root.querySelectorAll('[data-incentive-settings-tab]').forEach(function(button){
+        button.addEventListener('click',function(){
+          var tab=button.getAttribute('data-incentive-settings-tab');
+          root.dataset.activeTab=tab;
+          setIncentiveSettingsTab(tab);
+        });
+      });
+    }
+    renderIncentiveSignatoriesPage();
+    renderIncentiveExclusionsPage();
+    renderIncentiveFormulaPage();
+    setIncentiveSettingsTab(root.dataset.activeTab||'signatories');
+  }
+
   function renderIncentiveEmployeePage(){
     var el=document.getElementById('rkp-incentive-employee');if(!el)return;if(!incentiveUI.period)incentiveUI.period=incentiveMonthDefault();var p=incentiveBounds(incentiveUI.period);
     var build=function(){
@@ -15571,7 +15761,7 @@ function showHrPlaceholder(title, group, description) {
     if(!rows.length){rkToast('Tidak ada data karyawan yang dapat dicetak.');return;}
     if(!incentiveUI.employeeRecapParams||incentiveUI.employeeRecapParams.from!==p.from||incentiveUI.employeeRecapParams.to!==p.to||incentiveUI.employeeRecapParams.employeeId!==selected){rkToast('Periode atau karyawan berubah setelah rekap dimuat. Klik Tampilkan Rekap kembali sebelum mencetak.');return;}
     var allSelected=selected==='ALL',button=document.getElementById(mode==='ledger'?'rkIncEmpPrintRekap':'rkIncEmpPrint'),otherButton=document.getElementById(mode==='ledger'?'rkIncEmpPrint':'rkIncEmpPrintRekap');
-    if(button){button.disabled=true;button.textContent=mode==='ledger'?'Menyiapkan rekap...':'Memeriksa penandatangan...';}
+    if(button){button.disabled=true;button.textContent=mode==='ledger'?'Menyiapkan rekap...':'Memeriksa setting dokumen...';}
     if(otherButton)otherButton.disabled=true;
     var ledgerPrintWindow=null;
     try{
@@ -15585,10 +15775,10 @@ function showHrPlaceholder(title, group, description) {
         items.push(incentiveEmployeeLedgerSummary(rows,p));
       }else{
         var root=await rpcOptional('hr_get_incentive_signatories',{});root=root&&(root.signatories||root.data||root);
-        if(!root)throw new Error('Konfigurasi penandatangan backend tidak tersedia.');
+        if(!root)throw new Error('Konfigurasi setting dokumen backend tidak tersedia.');
         for(var i=0;i<rows.length;i++){
           var row=rows[i],sign=incentiveEmployeeSignatory(root,String(row.employee_id||row.nik||''));
-          if(!sign)throw new Error('Penandatangan global atau override belum lengkap untuk '+(row.nama||row.employee_id||'karyawan')+'.');
+          if(!sign)throw new Error('Setting Diajukan Oleh atau penyetuju belum lengkap untuk '+(row.nama||row.employee_id||'karyawan')+'.');
           items.push(incentiveEmployeePrintPages(row,p,data.formula,sign));
         }
       }
