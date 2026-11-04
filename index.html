@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="id"><head>
-<meta name="reholz-release" content="v13.9.1-attendance-flow-fixes">
+<meta name="reholz-release" content="v13.9.2-branch-evidence-attendance-map">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <link rel="preconnect" href="https://unpkg.com" crossorigin="">
@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://a.basemaps.cartocdn.com" crossorigin="">
 <link rel="preconnect" href="https://b.basemaps.cartocdn.com" crossorigin="">
 <meta name="theme-color" content="#007850">
-<meta name="app-release" content="v13.9.1-attendance-flow-fixes">
+<meta name="app-release" content="v13.9.2-branch-evidence-attendance-map">
 <title>ReHolz HRIS</title>
 <meta name="description" content="Sistem informasi karyawan ReHolz untuk presensi, foto profil, lokasi kantor, dan pengelolaan cuti.">
 <meta property="og:title" content="ReHolz HRIS">
@@ -2948,6 +2948,20 @@ body.rh-desk-on .rk-formula-footer{position:sticky;bottom:0;z-index:4;padding:12
 @media (max-width:760px){body.rh-desk-on .rk-sig-intro,body.rh-desk-on .rk-formula-intro{display:block;padding:16px}body.rh-desk-on .rk-sig-lock,body.rh-desk-on .rk-formula-role-pill{display:inline-flex;margin-top:12px}body.rh-desk-on .rk-formula-check-list{grid-template-columns:1fr}}
 </style>
 
+
+<style id="rh-v13-9-2-attendance-map-link-fix">
+@media (min-width:1024px) {
+  /* The legacy .rk-att-map-link rule positions approval-modal links absolutely.
+     Recap-table controls must remain inside their own address cell. */
+  body.rh-desk-on .rk-att-monitor-table td.rk-att-address .rk-att-row-map-button {
+    position: static !important; inset: auto !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important;
+    display: inline-flex; align-items: center; vertical-align: baseline;
+    margin: 3px 0 3px 8px !important; padding: 0 !important;
+    background: transparent !important; box-shadow: none !important;
+    color: #5268C6; font: inherit; line-height: inherit; cursor: pointer; text-decoration: underline; white-space: nowrap;
+  }
+}
+</style>
 </head>
 <body>
 <div id="rhLimitedAccess" role="status" aria-live="polite">Akses terbatas</div>
@@ -3471,6 +3485,8 @@ window.__APP_PREPARING_ASSETS = true;
           </button>
         </div>
         <div class="shift-note ok" id="shiftNote">Memuat status presensi...</div>
+        <button type="button" id="btnRefreshAppData" class="btn btn-ghost" style="margin:14px auto 0;max-width:360px;padding:10px 14px;font-size:13px" onclick="refreshAppData()">↻ Perbarui Data Aplikasi &amp; Lokasi Kantor</button>
+        <div id="appDataRefreshHint" role="status" aria-live="polite" style="min-height:16px;margin-top:7px;font-size:11.5px;color:var(--txt-muted)"></div>
       </div>
     </div>
 
@@ -4283,8 +4299,8 @@ window.__APP_PREPARING_ASSETS = true;
 var SUPABASE_URL = 'https://gkpaaabmzusqzrstbivp.supabase.co';
 var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrcGFhYWJtenVzcXpyc3RiaXZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1MjEzNTQsImV4cCI6MjEwOTA5NzM1NH0.Asv7bcSPWWeTuCWHfncEtJVOiVZ7b_TpyZbvheyH2rE';
 var APP_VERSION = '6.6-SUPABASE-REHOLZ-HRIS-AREA-DELEGATE-ROLE-GRID'; // Kept in sync with existing app-version RPC to avoid forced reload loops.
-var RH_HTML_RELEASE = 'v13.9.1-attendance-flow-fixes';
-var RH_DISPLAY_VERSION = 'v13.9.1';
+var RH_HTML_RELEASE = 'v13.9.2-branch-evidence-attendance-map';
+var RH_DISPLAY_VERSION = 'v13.9.2';
 var RH_RELEASE_STORAGE_KEY = 'reh_html_release_seen';
 var RH_RELEASE_UPGRADE_ACTIVE = false;
 var MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model/';
@@ -4741,7 +4757,7 @@ function setPrepProgress(p, t) {
 
 function registerAppServiceWorker() {
   if (!('serviceWorker' in navigator)) return Promise.resolve(false);
-  return navigator.serviceWorker.register('./sw.js?v=23', { scope: './', updateViaCache: 'none' }).then(function(registration) {
+  return navigator.serviceWorker.register('./sw.js?v=25', { scope: './', updateViaCache: 'none' }).then(function(registration) {
     // Ask the browser to revalidate sw.js instead of trusting an old HTTP-cache copy.
     try { if (registration && typeof registration.update === 'function') registration.update().catch(function() {}); } catch (e) {}
     // The new worker self-activates; this message also helps older compatible workers.
@@ -5991,7 +6007,8 @@ function backgroundLoads() {
   scheduleNets();
   // Pulihkan posisi terakhir hanya untuk pratinjau awal; GPS aktual tetap diperbarui.
   restoreGpsCache();
-  restoreOfficeCache();
+  // Office location is authoritative only when freshly resolved against the employee's current branch.
+  // Never restore the legacy NIK-only office cache (it can point to the previous branch).
   // Hangatkan GPS dan pustaka Leaflet segera setelah sesi aktif,
   // sehingga layar absensi tidak perlu memulai semuanya dari nol.
   gpsWarm();
@@ -6017,6 +6034,9 @@ function renderHome() {
   if (welcomeSub) welcomeSub.textContent = hariID(now) + ', ' + now.getDate() + ' ' + bulanID(now) + ' ' + now.getFullYear() + ' • Portal HRIS ReHolz - LUCEO';
   $('shiftHeadTitle').textContent = 'Jadwal Shift — ' + hariID(now) + ', ' + now.getDate() + ' ' + bulanID(now) + ' ' + now.getFullYear();
   renderShiftStatus();
+  var officeHint = $('appDataRefreshHint');
+  if (officeHint && S.office && S.office.branch) officeHint.textContent = 'Lokasi kantor aktif: ' + S.office.branch + '. Jika cabang karyawan baru saja diubah, tekan Perbarui Data Aplikasi.';
+  else if (officeHint && e.branch) officeHint.textContent = 'Lokasi kantor untuk cabang ' + e.branch + ' belum diverifikasi. Tekan Perbarui Data Aplikasi.';
   renderFaceBanner();
   hydrateFaces();
 }
@@ -6095,17 +6115,118 @@ function changePin() {
   });
 }
 
+function branchKey(value) {
+  return String(value == null ? '' : value).trim().normalize('NFKC').replace(/\s+/g, ' ').toLocaleLowerCase('id-ID');
+}
+
+function officeRecordForBranch(row, branch) {
+  if (!row || !branch || branchKey(row.branch) !== branchKey(branch)) return null;
+  var rawLat = row.latitude, rawLon = row.longitude;
+  var rawRadius = row.radius != null ? row.radius : (row.radius_m != null ? row.radius_m : row.radiusM);
+  if (rawLat == null || String(rawLat).trim() === '' || rawLon == null || String(rawLon).trim() === '' || rawRadius == null || String(rawRadius).trim() === '') return null;
+  var lat = Number(rawLat), lon = Number(rawLon);
+  var radius = Number(rawRadius);
+  var maxAccuracy = Number(row.maxAccuracy != null ? row.maxAccuracy : (row.max_accuracy_m != null ? row.max_accuracy_m : row.maxAccuracyM));
+  var status = String(row.status || 'AKTIF').trim().toUpperCase();
+  if (status !== 'AKTIF' || !isFinite(lat) || !isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180 || !isFinite(radius) || radius <= 0) return null;
+  if (!isFinite(maxAccuracy) || maxAccuracy <= 0) maxAccuracy = 100;
+  return Object.assign({}, row, { branch: String(row.branch).trim(), latitude: lat, longitude: lon, radius: radius, maxAccuracy: maxAccuracy, status: 'AKTIF' });
+}
+
+async function resolveOfficeForBranch(profile, bootstrapOffice, forceListRefresh) {
+  var branch = String(profile && (profile.branch || profile.cabang) || '').trim();
+  var selected = !forceListRefresh ? officeRecordForBranch(bootstrapOffice, branch) : null;
+  if (selected) {
+    try { localStorage.removeItem(officeCacheKey()); } catch (_) {}
+    return selected;
+  }
+  if (branch) {
+    try {
+      var response = await api('getLokasiKantor', [], 20000);
+      var list = response && (response.list || response.data && response.data.list);
+      if (Array.isArray(list)) {
+        for (var i = 0; i < list.length; i++) {
+          selected = officeRecordForBranch(list[i], branch);
+          if (selected) break;
+        }
+      }
+    } catch (e) {
+      console.warn('[ReHolz] Could not refresh branch office list:', e && e.message || e);
+    }
+  }
+  // Remove the old NIK-only cache even if the new branch has no valid office record.
+  try { localStorage.removeItem(officeCacheKey()); } catch (_) {}
+  return selected || null;
+}
+
+async function refreshAttendanceContext(forceOfficeList) {
+  if (!S.user || !S.user.nik) throw new Error('Sesi pengguna tidak tersedia. Silakan login ulang.');
+  var requestedNik = String(S.user.nik);
+  var bootstrap = await api('getFastBootstrap', [requestedNik], 30000);
+  if (!S.user || String(S.user.nik) !== requestedNik) throw new Error('Sesi berubah saat data diperbarui. Silakan ulangi dari akun yang aktif.');
+  if (!bootstrap || !bootstrap.profile) throw new Error('Server tidak mengembalikan profil karyawan terbaru.');
+  S.user.employee = bootstrap.profile;
+  S.user.role = bootstrap.profile.role || S.user.role;
+  if (bootstrap.profile.nama) S.user.nama = bootstrap.profile.nama;
+  DATA.faceVer[S.user.nik] = bootstrap.profile.facePhotoVer || 0;
+  S.status = bootstrap.status || { masuk: false, pulang: false };
+  S.sisaCT = bootstrap.sisaCuti;
+  S.face = bootstrap.faceStatus || { registered: false, canRegister: false };
+  var currentRole = String(S.user.role || '').toUpperCase();
+  S.approver = currentRole === 'ADMIN' || currentRole === 'SUPERADMIN' || (currentRole === 'KARYAWAN' && bootstrap.hasSubordinates === true);
+  S.pendingTotal = currentRole === 'ADMIN' ? 0 : (bootstrap.pendingTotal || 0);
+  S.office = await resolveOfficeForBranch(bootstrap.profile, bootstrap.office, !!forceOfficeList);
+  saveSession();
+  applyRoleMenus();
+  renderHome();
+  updateBadges();
+  if (ATT_MAP && ATT_MAP.map && S.office) {
+    syncAttMapOffice(S.office);
+    if (!GPS.pos || GPS.cached) ATT_MAP.map.setView([S.office.latitude, S.office.longitude], MAP_CONFIG.zoom.attendanceFallback);
+  }
+  return { profile: bootstrap.profile, office: S.office, status: S.status };
+}
+
+function refreshAppData() {
+  var btn = $('btnRefreshAppData'), hint = $('appDataRefreshHint');
+  if (btn && btn.disabled) return;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Memperbarui data…'; }
+  if (hint) { hint.textContent = 'Mengambil profil, status presensi, dan lokasi kantor cabang dari server…'; hint.style.color = 'var(--txt-muted)'; }
+  return refreshAttendanceContext(true).then(function(result) {
+    if (!result.office) {
+      var branch = String(result.profile && (result.profile.branch || result.profile.cabang) || 'belum ditentukan');
+      var msg = 'Lokasi kantor aktif untuk cabang ' + branch + ' belum tersedia atau tidak valid. Admin perlu memeriksa menu Lokasi Kantor. Lokasi cabang lama tidak digunakan.';
+      if (hint) { hint.textContent = msg; hint.style.color = '#9C382A'; }
+      toast(msg);
+      return false;
+    }
+    if (hint) { hint.textContent = 'Data terbaru berhasil dimuat. Cabang kantor aktif: ' + result.office.branch + '.'; hint.style.color = '#007850'; }
+    if (typeof loadTeam === 'function') loadTeam();
+    if (typeof loadMyRequests === 'function') loadMyRequests();
+    toast('Data aplikasi dan lokasi kantor berhasil diperbarui.');
+    return true;
+  }).catch(function(e) {
+    var msg = 'Pembaruan data gagal: ' + (e && e.message || e) + '. Periksa koneksi lalu coba lagi.';
+    if (hint) { hint.textContent = msg; hint.style.color = '#9C382A'; }
+    toast(msg);
+    return false;
+  }).finally(function() {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Perbarui Data Aplikasi & Lokasi Kantor'; }
+  });
+}
+window.refreshAppData = refreshAppData;
+
 function loadBootstrap() {
   var gen = SESSION_GEN;
-  return api('getFastBootstrap', [S.user.nik], 30000).then(function(b) {
+  return api('getFastBootstrap', [S.user.nik], 30000).then(async function(b) {
     S.booting = false;
     if (stale(gen)) return;
+    if (!b || !b.profile) throw new Error('Profil karyawan tidak tersedia dari server.');
     S.user.employee = b.profile;
     S.user.role = b.profile.role || S.user.role;
     DATA.faceVer[S.user.nik] = b.profile.facePhotoVer || 0;
-    S.office = b.office;
-    saveOfficeCache();
-    // Jika peta sudah terbuka sebelum bootstrap selesai, arahkan ke kantor yang benar.
+    S.office = await resolveOfficeForBranch(b.profile, b.office, false);
+    // If the backend returned null or a different branch, the previous branch cache is never reused.
     if (ATT_MAP && ATT_MAP.map && S.office && validLL(Number(S.office.latitude), Number(S.office.longitude))) {
       syncAttMapOffice(S.office);
       if (!GPS.pos || GPS.cached) ATT_MAP.map.setView([Number(S.office.latitude), Number(S.office.longitude)], MAP_CONFIG.zoom.attendanceFallback);
@@ -6132,6 +6253,7 @@ function loadBootstrap() {
   }).catch(function(e) {
     S.booting = false;
     if (stale(gen)) return;
+    console.warn('[ReHolz] Bootstrap refresh failed:', e && e.message || e);
     api('getStatusHariIni', [S.user.nik]).then(function(st) {
       if (stale(gen)) return;
       S.status = st;
@@ -6708,10 +6830,24 @@ function startAttMapEarly() {
 async function startAttendance(type) {
   if (isAdminReadOnly()) { toast('Akun Administrator memiliki akses baca saja dan tidak dapat melakukan presensi.'); return; }
   if (FACE_REFERENCE_UPDATING || FACE_PROFILE_PREPARING) { toast('Face ID sedang diperbarui. Tunggu hingga selesai.'); return; }
-  if (ATT.submitting) return;
-  // Pulihkan pratinjau lokal tepat sebelum layar absensi dibuka; tidak menunggu API atau GPS baru.
+  if (ATT.submitting || ATT.contextRefreshing) return;
+  // Re-check branch, office coordinates, and today's attendance status on the server before every attempt.
+  // Never allow yesterday's/current-tab NIK-only office cache to decide today's geofence.
+  ATT.contextRefreshing = true;
+  try {
+    await refreshAttendanceContext(false);
+  } catch (contextError) {
+    toast('Data presensi terbaru tidak dapat diverifikasi dari server: ' + (contextError && contextError.message || contextError));
+    return;
+  } finally {
+    ATT.contextRefreshing = false;
+  }
+  if (!S.office) {
+    var branchName = String(S.user && S.user.employee && (S.user.employee.branch || S.user.employee.cabang) || 'karyawan');
+    toast('Lokasi kantor aktif untuk cabang ' + branchName + ' belum tersedia atau tidak valid. Hubungi admin untuk memperbarui Lokasi Kantor.');
+    return;
+  }
   restoreGpsCache();
-  restoreOfficeCache();
   if (!S.face.registered) { toast('Face ID belum terdaftar. Buka Akun untuk menambahkan foto profil.'); return; }
   var st = S.status || {};
   if (st.masuk && st.pulang) { toast('Clock In dan Clock Out hari ini sudah tercatat.'); return; }
@@ -7393,26 +7529,35 @@ function evidenceStoragePath(value) {
 }
 
 var RH_EVIDENCE_URL_CACHE = new Map();
+var RH_EVIDENCE_URL_PENDING = new Map();
 async function resolveEvidenceDisplayUrl(value, forceRefresh) {
   var s = String(value || '').trim();
   if (!s) return '';
-  // Embedded legacy attachments stay local; no Storage RPC is needed.
+  // Legacy data URLs and local blobs never need a Storage round-trip.
   if (/^data:/i.test(s) || /^blob:/i.test(s)) return s;
   var path = evidenceStoragePath(s);
-  // Storage URLs can already be signed but expired. Resolve their object path first and request a fresh URL.
   if (path) {
-    var cached = RH_EVIDENCE_URL_CACHE.get(path);
-    if (!forceRefresh && cached && Date.now() - cached.at < 20000) return cached.url;
-    var result = await api('getEvidenceSignedUrl', [path], 20000);
-    var signed = result && (result.signedUrl || result.signed_url || result.url ||
-      (result.data && (result.data.signedUrl || result.data.signed_url || result.data.url)));
-    if (typeof signed !== 'string' || !/^https?:\/\//i.test(signed)) {
-      // Public storage URLs can still be used when an older backend cannot issue a signed URL.
-      if (/^https?:\/\//i.test(s) && /\/storage\/v1\/object\/public\/evidence\//i.test(s)) return s;
-      throw new Error((result && (result.message || result.error)) || 'Tautan lampiran tidak tersedia.');
-    }
-    RH_EVIDENCE_URL_CACHE.set(path, { url: signed, at: Date.now() });
-    return signed;
+    // The legacy Edge Function issues signed URLs for one hour; keep them for 50 minutes.
+    // Cache is scoped to the active user/role to avoid reusing another login's signed link.
+    var identity = String(S.user && S.user.nik || 'guest') + ':' + String(S.user && S.user.role || '').toUpperCase();
+    var cacheKey = identity + '|' + path;
+    var cached = RH_EVIDENCE_URL_CACHE.get(cacheKey);
+    if (!forceRefresh && cached && Date.now() - cached.at < 50 * 60 * 1000) return cached.url;
+    if (!forceRefresh && RH_EVIDENCE_URL_PENDING.has(cacheKey)) return RH_EVIDENCE_URL_PENDING.get(cacheKey);
+    var request = (async function() {
+      var result = await api('getEvidenceSignedUrl', [path], 20000);
+      var signed = result && (result.signedUrl || result.signed_url || result.url ||
+        (result.data && (result.data.signedUrl || result.data.signed_url || result.data.url)));
+      if (typeof signed !== 'string' || !/^https?:\/\//i.test(signed)) {
+        if (/^https?:\/\//i.test(s) && /\/storage\/v1\/object\/public\/evidence\//i.test(s)) return s;
+        throw new Error((result && (result.message || result.error)) || 'Tautan lampiran tidak tersedia.');
+      }
+      RH_EVIDENCE_URL_CACHE.set(cacheKey, { url: signed, at: Date.now() });
+      return signed;
+    })();
+    RH_EVIDENCE_URL_PENDING.set(cacheKey, request);
+    try { return await request; }
+    finally { if (RH_EVIDENCE_URL_PENDING.get(cacheKey) === request) RH_EVIDENCE_URL_PENDING.delete(cacheKey); }
   }
   if (/^https?:\/\//i.test(s)) return s;
   return s;
@@ -10715,6 +10860,7 @@ function showHrPlaceholder(title, group, description) {
         <button type="button" class="rk-parent" onclick="RHDeskApi.rkToggleGroup(this)"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Waktu &amp; Kehadiran<span class="rk-chev">▾</span></button>
         <div class="rk-sub">
           <button data-p="att"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Rekap Absensi</button>
+          <button data-p="attmap" id="rkNavAttMap" style="display:none"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/><circle cx="15" cy="10" r="2"/></svg>Peta Presensi</button>
           <button data-p="cuti"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>Rekap Time Off</button>
           <button data-p="rekap"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#007850" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h4"/></svg>Laporan Absensi</button>
         </div>
@@ -10805,6 +10951,7 @@ function showHrPlaceholder(title, group, description) {
     <section class="rk-page on" id="rkp-dash"></section>
     <section class="rk-page" id="rkp-emp"></section>
     <section class="rk-page" id="rkp-att"></section>
+    <section class="rk-page" id="rkp-attmap"></section>
     <section class="rk-page" id="rkp-apr"></section>
     <section class="rk-page" id="rkp-loc"></section>
     <section class="rk-page" id="rkp-attset"></section>
@@ -10869,6 +11016,7 @@ function showHrPlaceholder(title, group, description) {
     emp: ['Daftar Karyawan', 'Kelola data karyawan'],
     pfile: ['Personal File Karyawan', 'Informasi personal dan pekerjaan karyawan'],
     att: ['Rekap Absensi', 'Rekapitulasi Kehadiran Karyawan'],
+    attmap: ['Peta Presensi', 'Posisi Clock In terakhir karyawan yang belum Clock Out'],
     rekap: ['Laporan Absensi', 'Rekapitulasi kehadiran per karyawan dan rentang tanggal'],
     attset: ['Aturan Kehadiran', 'Atur jadwal cabang dan toleransi keterlambatan'],
     calendar: ['Kalender Kerja', 'Kelola hari libur nasional, hari kerja, dan hari libur'],
@@ -10918,6 +11066,8 @@ function showHrPlaceholder(title, group, description) {
     var d = document.getElementById('rhDesk');
     if (d) d.setAttribute('aria-hidden', 'false');
     fillUser();
+    var liveMapNav=document.getElementById('rkNavAttMap');
+    if(liveMapNav)liveMapNav.style.display=(window.S&&S.user&&String(S.user.role||'').toUpperCase()==='SUPERADMIN')?'':'none';
     var adminNotice=document.getElementById('rhAdminReadOnlyNotice');
     if(!adminNotice){adminNotice=document.createElement('div');adminNotice.id='rhAdminReadOnlyNotice';adminNotice.className='rk-readonly-admin-note';adminNotice.textContent='Akses Admin hanya untuk melihat. Perubahan dan persetujuan memerlukan Superadmin.';var main=document.querySelector('#rhDesk .rk-main');if(main)main.insertBefore(adminNotice,main.firstChild);}
     adminNotice.style.display=(window.S&&S.user&&String(S.user.role||'').toUpperCase()==='ADMIN')?'block':'none';
@@ -10962,6 +11112,9 @@ function showHrPlaceholder(title, group, description) {
 
   /* ---------------- Navigasi halaman ---------------- */
   function goPage(p) {
+    if (p === 'attmap' && !(window.S && S.user && String(S.user.role || '').toUpperCase() === 'SUPERADMIN')) {
+      rkToast('Peta Presensi hanya tersedia untuk Superadmin.'); p = 'att';
+    }
     if (!TITLES[p]) p = 'dash';
     cur = p;
     var btns = document.querySelectorAll('#rkNav button');
@@ -10988,6 +11141,7 @@ function showHrPlaceholder(title, group, description) {
     if (p === 'emp') renderEmpPage();
     if (p === 'pfile') renderPfilePage();
     if (p === 'att') renderAttPage();
+    if (p === 'attmap') renderAttMapPage();
     if (p === 'rekap') renderRekapPage();
     if (p === 'cuti') renderCutiPage();
     if (p === 'timeoffRequest') renderTimeOffRequestPage(timeOffRequestGroup);
@@ -12640,10 +12794,108 @@ function showHrPlaceholder(title, group, description) {
       var photo=ev.target.closest&&ev.target.closest('[data-att-photo-index]');
       if(photo){ev.preventDefault();openAttendanceMonitorPhoto(Number(photo.getAttribute('data-att-photo-index')));return;}
       var map=ev.target.closest&&ev.target.closest('[data-att-map-index]');
-      if(map){ev.preventDefault();var r=attMonitorState.rows[Number(map.getAttribute('data-att-map-index'))];var lat=attMonFirst(r,['latitude','lat','gps_latitude','gps_lat']),lon=attMonFirst(r,['longitude','lon','lng','gps_longitude','gps_lon']);if(lat!==''&&lon!==''&&isFinite(Number(lat))&&isFinite(Number(lon)))window.open('https://www.google.com/maps?q='+encodeURIComponent(lat+','+lon),'_blank','noopener');}
+      if(map){ev.preventDefault();var r=attMonitorState.rows[Number(map.getAttribute('data-att-map-index'))];openAttendanceRowMap(r);}
     });
     fetchAttendanceMonitoring();
   }
+  var attLiveMapState = { map: null, layer: null, date: '', rows: [], loaded: false };
+  function renderAttMapPage() {
+    if (!(window.S && S.user && String(S.user.role || '').toUpperCase() === 'SUPERADMIN')) { rkToast('Peta Presensi hanya tersedia untuk Superadmin.'); return; }
+    var el=document.getElementById('rkp-attmap');if(!el)return;
+    if(attLiveMapState.map){try{attLiveMapState.map.off();attLiveMapState.map.remove();}catch(_){}attLiveMapState.map=null;attLiveMapState.layer=null;}
+    var today=attMonLocalISO(new Date());attLiveMapState.date=today;attLiveMapState.rows=[];attLiveMapState.loaded=false;
+    el.innerHTML='<div class="rk-card rk-att-monitor-toolbar"><div class="rk-att-monitor-dates"><label>Tanggal presensi<input class="rk-in" id="rkAttLiveDate" type="date" value="'+today+'"></label><button type="button" class="rk-btn" id="rkAttLiveRefresh">↻ Perbarui Peta</button></div><div class="rk-att-monitor-search"><span id="rkAttLiveCount" class="rk-pill info">0 karyawan sedang absen</span></div><p class="rk-note" style="margin-top:10px">Peta menampilkan koordinat saat Clock In terakhir untuk karyawan yang belum memiliki Clock Out pada tanggal pilihan. Ini bukan pelacakan GPS bergerak secara real time.</p></div><div class="rk-card"><div id="rkAttLiveMap" style="width:100%;height:min(68vh,680px);min-height:360px;border-radius:12px;background:#EEF4EF;overflow:hidden"><div class="rk-loading" style="padding:24px">Memuat peta presensi…</div></div><div id="rkAttLiveMapNote" class="rk-note" style="margin-top:10px"></div><div id="rkAttLiveUnlocated" style="margin-top:8px"></div></div>';
+    document.getElementById('rkAttLiveRefresh').addEventListener('click',fetchAttLiveMap);
+    document.getElementById('rkAttLiveDate').addEventListener('change',fetchAttLiveMap);
+    fetchAttLiveMap();
+  }
+  function attendanceMapActiveRows(rows,date) {
+    var grouped=Object.create(null);
+    (rows||[]).forEach(function(row){
+      row=row||{};var emp=String(attMonFirst(row,['employee_id','nik'])||'').trim();
+      if(!emp||String(attMonFirst(row,['date','tanggal'])||'').slice(0,10)!==date)return;
+      var status=String(attMonFirst(row,['status_approval','statusApproval'])||'').toUpperCase();
+      if(/DITOLAK|REJECTED/.test(status))return;
+      var type=String(attMonFirst(row,['type','tipe','attendance_type'])||'').toUpperCase();
+      var tm=String(attMonFirst(row,['time','jam'])||'').slice(0,8);
+      if(!grouped[emp])grouped[emp]={employee_id:emp,clockIn:null,clockOut:null};
+      if(type==='CLOCK IN'||type==='MASUK'){
+        if(!grouped[emp].clockIn||tm>=String(attMonFirst(grouped[emp].clockIn,['time','jam'])||''))grouped[emp].clockIn=row;
+      } else if(type==='CLOCK OUT'||type==='PULANG'){
+        if(!grouped[emp].clockOut||tm>=String(attMonFirst(grouped[emp].clockOut,['time','jam'])||''))grouped[emp].clockOut=row;
+      }
+    });
+    var missingCoordinates=[];
+    var activeRows=Object.keys(grouped).map(function(k){return grouped[k];}).filter(function(g){
+      if(!g.clockIn)return false;
+      // If records were corrected/re-entered, a Clock Out older than the latest Clock In
+      // must not hide the employee from the active-attendance map.
+      if(g.clockOut){
+        var inTime=String(attMonFirst(g.clockIn,['time','jam'])||'').slice(0,8);
+        var outTime=String(attMonFirst(g.clockOut,['time','jam'])||'').slice(0,8);
+        if(!inTime || !outTime || outTime >= inTime)return false;
+      }
+      var rawLat=attMonFirst(g.clockIn,['latitude','lat']),rawLon=attMonFirst(g.clockIn,['longitude','lon','lng']);
+      var lat=Number(rawLat),lon=Number(rawLon);
+      if(rawLat===''||rawLon===''||!isFinite(lat)||!isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180||(lat===0&&lon===0)){
+        missingCoordinates.push(g.clockIn);
+        return false;
+      }
+      return true;
+    }).map(function(g){return g.clockIn;});
+    attendanceMapActiveRows.missingCoordinates=missingCoordinates;
+    return activeRows;
+  }
+  function fetchAttLiveMap() {
+    if(!(window.S&&S.user&&String(S.user.role||'').toUpperCase()==='SUPERADMIN'))return;
+    var dateEl=document.getElementById('rkAttLiveDate'),mapEl=document.getElementById('rkAttLiveMap'),note=document.getElementById('rkAttLiveMapNote'),count=document.getElementById('rkAttLiveCount'),btn=document.getElementById('rkAttLiveRefresh');
+    if(!dateEl||!mapEl)return;var date=dateEl.value;
+    if(!date){rkToast('Pilih tanggal presensi.');return;}
+    attLiveMapState.date=date;if(btn){btn.disabled=true;btn.textContent='Memuat…';}mapEl.innerHTML='<div class="rk-loading" style="padding:24px">Mengambil data Clock In dan Clock Out…</div>';if(note)note.textContent='';
+    var token=typeof window.getToken==='function'?String(window.getToken()||''):'';
+    if(!token){if(note)note.textContent='Sesi tidak tersedia. Silakan login ulang.';if(btn){btn.disabled=false;btn.textContent='↻ Perbarui Peta';}return;}
+    if(typeof window.getSb!=='function'){
+      mapEl.innerHTML='<div class="rk-empty" style="padding:24px">Koneksi data tidak tersedia. Muat ulang aplikasi dan login kembali.</div>';
+      if(note)note.textContent='Supabase client bridge tidak tersedia.';
+      if(btn){btn.disabled=false;btn.textContent='↻ Perbarui Peta';}
+      return;
+    }
+    Promise.resolve().then(function(){return window.getSb();}).then(function(client){
+      if(!client||typeof client.rpc!=='function')throw new Error('Koneksi Supabase tidak tersedia.');
+      return client.rpc('hr_get_attendance_monitoring',{p_token:token,p_start_date:date,p_end_date:date});
+    }).then(function(result){
+      if(!result||result.error)throw new Error(result&&result.error&&(result.error.message||result.error.code)||'Gagal membaca data presensi.');
+      if(!attMonHasPayload(result.data))throw new Error('Format data pemantauan presensi tidak sesuai.');
+      var all=attMonRows(result.data)||[];var active=attendanceMapActiveRows(all,date);var unlocated=attendanceMapActiveRows.missingCoordinates||[];attLiveMapState.rows=active;attLiveMapState.loaded=true;
+      if(count)count.textContent=(active.length+unlocated.length)+' belum Clock Out · '+active.length+' titik peta';
+      var unlocatedBox=document.getElementById('rkAttLiveUnlocated');
+      if(unlocatedBox){unlocatedBox.innerHTML=unlocated.length?'<div class="rk-note"><b>'+unlocated.length+' karyawan belum memiliki koordinat valid:</b><ul style="margin:6px 0 0 18px">'+unlocated.map(function(row){return '<li>'+escH(attMonFirst(row,['employee_name','nama','full_name'])||attMonFirst(row,['employee_id','nik'])||'Karyawan')+' ('+escH(attMonFirst(row,['employee_id','nik'])||'—')+')</li>';}).join('')+'</ul></div>':'';}
+      return ensureDeskLeaflet().then(function(L){
+        if(!mapEl.isConnected)return;
+        if(attLiveMapState.map){try{attLiveMapState.map.off();attLiveMapState.map.remove();}catch(_){}attLiveMapState.map=null;}
+        mapEl.innerHTML='';attLiveMapState.map=L.map(mapEl);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(attLiveMapState.map);
+        attLiveMapState.layer=L.featureGroup().addTo(attLiveMapState.map);
+        active.forEach(function(row){
+          var lat=Number(attMonFirst(row,['latitude','lat'])),lon=Number(attMonFirst(row,['longitude','lon','lng']));
+          var name=String(attMonFirst(row,['employee_name','nama','full_name'])||attMonFirst(row,['employee_id'])||'Karyawan');
+          var nik=String(attMonFirst(row,['employee_id','nik'])||'');
+          var branch=String(attMonFirst(row,['employee_branch_snapshot','branch','branch_target'])||'');
+          var time=String(attMonFirst(row,['time','jam'])||'').slice(0,5);
+          var address=String(attMonFirst(row,['location_address','address','alamat'])||'');
+          var acc=attMonFirst(row,['accuracy','gps_accuracy']);
+          var html='<b>'+escH(name)+'</b><br>ID: '+escH(nik)+'<br>Clock In: '+escH(time||'—')+(branch?'<br>Cabang: '+escH(branch):'')+(acc!==''?'<br>Akurasi GPS: '+escH(acc)+' m':'')+(address?'<br>'+escH(address):'');
+          L.marker([lat,lon]).addTo(attLiveMapState.layer).bindPopup(html);
+        });
+        if(active.length){var bounds=attLiveMapState.layer.getBounds();if(bounds.isValid())attLiveMapState.map.fitBounds(bounds.pad(active.length===1?0.18:0.12),{maxZoom:16});}
+        else attLiveMapState.map.setView([-2.5,118],5);
+        setTimeout(function(){if(attLiveMapState.map)attLiveMapState.map.invalidateSize();},120);
+        if(note)note.textContent=active.length?'Menampilkan posisi Clock In terakhir '+active.length+' karyawan yang belum Clock Out. Klik penanda untuk detail.':(unlocated.length?'Ada karyawan yang belum Clock Out, tetapi tidak memiliki koordinat valid sehingga tidak dapat dipetakan.':'Tidak ada karyawan dengan Clock In tanpa Clock Out pada tanggal ini.');
+      });
+    }).catch(function(e){mapEl.innerHTML='<div class="rk-empty" style="padding:24px">Peta presensi gagal dimuat: '+escH(e&&e.message||e)+'</div>';if(note)note.textContent='Periksa akses Superadmin dan RPC hr_get_attendance_monitoring.';if(count)count.textContent='Data tidak tersedia';})
+    .finally(function(){if(btn){btn.disabled=false;btn.textContent='↻ Perbarui Peta';}});
+  }
+
   function attMonSummaryCard(key,label,value,tone) {
     return '<div class="rk-att-monitor-stat '+tone+'"><span>'+escH(label)+'</span><strong id="rkAttMetric_'+key+'">'+escH(value)+'</strong></div>';
   }
@@ -12714,7 +12966,8 @@ function showHrPlaceholder(title, group, description) {
   function attMonCoordinates(x) {
     var lat=attMonFirst(x,['latitude','lat','gps_latitude','gps_lat']);
     var lon=attMonFirst(x,['longitude','lon','lng','gps_longitude','gps_lon']);
-    return lat!=='' && lon!=='' && isFinite(Number(lat)) && isFinite(Number(lon)) ? String(lat)+','+String(lon) : '';
+    var nLat=Number(lat),nLon=Number(lon);
+    return lat!=='' && lon!=='' && isFinite(nLat) && isFinite(nLon) && Math.abs(nLat)<=90 && Math.abs(nLon)<=180 && !(nLat===0&&nLon===0) ? String(nLat)+','+String(nLon) : '';
   }
   function attMonPhotoSource(x) {
     return attMonFirst(x,['photo_url','photoUrl','foto_url','fotoUrl','photo','foto','foto_base64','fotoBase64','evidence_url','evidence_path','foto_path','photo_path','storage_path']);
@@ -12809,7 +13062,7 @@ function showHrPlaceholder(title, group, description) {
           var coord=attMonCoordinates(x);
           var addr=String(v==null?'':v);
           var isMapLabel=/^(show on map|—|-)$/i.test(addr);
-          var mapLink=coord?' <button type="button" class="rk-att-map-link" data-att-map-index="'+i+'">Lihat di Peta</button>':'';
+          var mapLink=coord?' <button type="button" class="rk-att-row-map-button" data-att-map-index="'+i+'">Lihat di Peta</button>':'';
           return '<td class="rk-att-address">'+(coord&&isMapLabel?mapLink.replace(/^ /,''):escH(addr)+mapLink)+'</td>';
         }
         if(col===18){ return '<td>'+attMonApproval(x)+'</td>'; }
@@ -12854,15 +13107,58 @@ function showHrPlaceholder(title, group, description) {
 
   function openAttendanceMonitorPhoto(index) {
     var row=attMonitorState.rows[index];if(!row)return;
-    var src=attMonFirst(row,['photo_url','photoUrl','foto_url','fotoUrl','photo','foto','foto_base64','fotoBase64','evidence_url','evidence_path','foto_path','photo_path','storage_path']);
+    var src=attMonPhotoSource(row);
     if(!src){rkToast('Tidak ada foto pada catatan presensi ini.');return;}
     var shade=document.getElementById('rkAttPhotoShade');
     if(!shade){shade=document.createElement('div');shade.id='rkAttPhotoShade';shade.className='rk-att-photo-shade';shade.innerHTML='<section class="rk-att-photo-modal" role="dialog" aria-modal="true"><button type="button" data-att-photo-close class="rk-dash-modal-close" aria-label="Tutup">×</button><h3>Foto Presensi</h3><div data-att-photo-content></div></section>';document.body.appendChild(shade);shade.addEventListener('click',function(ev){if(ev.target===shade||(ev.target.closest&&ev.target.closest('[data-att-photo-close]')))shade.classList.remove('on');});shade.addEventListener('keydown',function(ev){if(ev.key==='Escape')shade.classList.remove('on');});}
     var content=shade.querySelector('[data-att-photo-content]');
-    function show(url){if(!content)return;var s=String(url||'');if(s&&s.indexOf('data:')!==0&&!/^https?:\/\//i.test(s)&&s.charAt(0)!=='/')s='';content.innerHTML=s?'<img alt="Foto bukti presensi" src="'+escH(s)+'" onerror="this.style.display=\'none\';this.parentNode.insertAdjacentHTML(\'beforeend\',\'<p class=\\\'rk-empty\\\'>Foto tidak dapat dimuat.</p>\')">':'<div class="rk-empty">Foto tidak dapat dimuat.</div>';shade.classList.add('on');}
-    if(/^data:image\//i.test(String(src))||/^https?:\/\//i.test(String(src))||String(src).charAt(0)==='/'){show(src);return;}
-    content.innerHTML='<div class="rk-loading">Memuat foto...</div>';shade.classList.add('on');
-    api('getEvidenceSignedUrl',[String(src)],20000).then(function(r){show((r&&(r.url||r.signedUrl||r.signed_url||r.data&&((r.data.url)||(r.data.signedUrl))))||'');}).catch(function(){show('');});
+    var requestKey=String(row.id||index)+'_'+Date.now();shade.dataset.requestKey=requestKey;
+    content.innerHTML='<div class="rk-loading">Memuat foto bukti dari penyimpanan…</div>';shade.classList.add('on');
+    function load(force) {
+      window.resolveEvidenceDisplayUrl(src,!!force).then(function(url){
+        if(!content.isConnected||shade.dataset.requestKey!==requestKey)return;
+        if(!url)throw new Error('URL kosong');
+        var img=document.createElement('img');img.alt='Foto bukti presensi';img.decoding='async';img.loading='eager';img.style.maxWidth='100%';img.style.height='auto';
+        img.onerror=function(){
+          if(!force){content.innerHTML='<div class="rk-loading">Tautan foto kedaluwarsa, memperbarui…</div>';load(true);}
+          else content.innerHTML='<div class="rk-empty">Foto tidak dapat dimuat. Periksa status objek di bucket evidence dan izin akses akun.</div>';
+        };
+        content.innerHTML='';content.appendChild(img);img.src=driveThumb(url);
+      }).catch(function(err){
+        if(!content.isConnected||shade.dataset.requestKey!==requestKey)return;
+        content.innerHTML='<div class="rk-empty">Foto tidak dapat dimuat: '+escH(err&&err.message||'akses ditolak')+'</div>';
+      });
+    }
+    load(false);
+  }
+
+  var RK_ATT_ROW_MAP = null;
+  function openAttendanceRowMap(row) {
+    row=row||{};
+    var rawLat=attMonFirst(row,['latitude','lat','gps_latitude','gps_lat']),rawLon=attMonFirst(row,['longitude','lon','lng','gps_longitude','gps_lon']);
+    var lat=Number(rawLat),lon=Number(rawLon);
+    if(rawLat===''||rawLon===''||!isFinite(lat)||!isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180||(lat===0&&lon===0)){rkToast('Koordinat lokasi pada catatan ini tidak valid.');return;}
+    var shade=document.getElementById('rkAttLocationShade');
+    if(!shade){shade=document.createElement('div');shade.id='rkAttLocationShade';shade.style.cssText='position:fixed;inset:0;z-index:10080;background:rgba(8,24,17,.68);display:none;align-items:center;justify-content:center;padding:18px';shade.innerHTML='<section role="dialog" aria-modal="true" style="width:min(760px,100%);background:#fff;border-radius:16px;padding:16px;box-shadow:0 18px 60px rgba(0,0,0,.25)"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px"><div><h3 style="margin:0;color:#1E2B23">Lokasi Presensi</h3><div id="rkAttLocationMeta" style="font-size:12px;color:#5E6E63"></div></div><button type="button" data-att-location-close class="rk-btn ghost">Tutup</button></div><div id="rkAttLocationMap" style="height:min(58vh,480px);min-height:280px;border-radius:12px;overflow:hidden;background:#EEF4EF"></div><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap"><span id="rkAttLocationAddress" style="font-size:12px;color:#5E6E63"></span><a id="rkAttLocationExternal" class="rk-btn ghost" target="_blank" rel="noopener noreferrer">Buka di Google Maps ↗</a></div></section>';document.body.appendChild(shade);shade.addEventListener('click',function(ev){if(ev.target===shade||(ev.target.closest&&ev.target.closest('[data-att-location-close]')))closeAttendanceRowMap();});document.addEventListener('keydown',function(ev){if(ev.key==='Escape')closeAttendanceRowMap();});}
+    var name=attMonFirst(row,['employee_name','nama','full_name'])||attMonFirst(row,['employee_id'])||'Karyawan';
+    var when=[attMonFirst(row,['date','tanggal']),String(attMonFirst(row,['time','jam'])||'').slice(0,5)].filter(Boolean).join(' · ');
+    document.getElementById('rkAttLocationMeta').textContent=name+(when?' · '+when:'');
+    document.getElementById('rkAttLocationAddress').textContent=String(attMonFirst(row,['location_address','address','alamat'])||lat.toFixed(6)+', '+lon.toFixed(6));
+    document.getElementById('rkAttLocationExternal').href='https://www.google.com/maps?q='+encodeURIComponent(lat+','+lon);
+    shade.style.display='flex';
+    var mapEl=document.getElementById('rkAttLocationMap');mapEl.innerHTML='<div class="rk-loading" style="padding:18px">Memuat peta…</div>';
+    ensureDeskLeaflet().then(function(L){
+      if(!shade.isConnected||shade.style.display==='none')return;
+      if(RK_ATT_ROW_MAP){try{RK_ATT_ROW_MAP.off();RK_ATT_ROW_MAP.remove();}catch(_){}RK_ATT_ROW_MAP=null;}
+      mapEl.innerHTML='';RK_ATT_ROW_MAP=L.map(mapEl,{scrollWheelZoom:true}).setView([lat,lon],16);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(RK_ATT_ROW_MAP);
+      L.marker([lat,lon]).addTo(RK_ATT_ROW_MAP).bindPopup(escH(name)+'<br>'+escH(when)).openPopup();
+      setTimeout(function(){if(RK_ATT_ROW_MAP)RK_ATT_ROW_MAP.invalidateSize();},100);
+    }).catch(function(e){mapEl.innerHTML='<div class="rk-empty" style="padding:18px">Peta gagal dimuat: '+escH(e&&e.message||e)+'</div>';});
+  }
+  function closeAttendanceRowMap(){
+    if(RK_ATT_ROW_MAP){try{RK_ATT_ROW_MAP.off();RK_ATT_ROW_MAP.remove();}catch(_){}RK_ATT_ROW_MAP=null;}
+    var shade=document.getElementById('rkAttLocationShade');if(shade)shade.style.display='none';
   }
 
   function paintAttToday() {
